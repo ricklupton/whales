@@ -13,7 +13,8 @@ import sys
 if '../1. Models' not in sys.path: sys.path.insert(0, '../1. Models')
 import WAMIT
 
-from viscous_drag import ViscousDragModel
+from whales.viscous_drag import ViscousDragModel
+from whales.utils import skew, shift
 
 g = 9.81
 
@@ -112,14 +113,14 @@ class HydrodynamicsInfo(object):
         #  SS_kl = S(w_l) * S(w_l + w_k)
         SS = np.tile(S_wave, (len(w), 1))
         for k in range(len(w)):
-            SS[k,:] *= shift(S_wave, k)
+            SS[k,:] *= shift(S_wave, k, fill=0)
 
         # Next use the Newman approximation to make a similar matrix TTc
         Tc = self.Tc(w) # interpolate -> (len(w), 6) matrix
         TTc = np.tile(Tc, (len(w), 1, 1)) # copy downwards new 0 axis
         for k in range(len(w)):
             for i in range(6):
-                TTc[k,:,i] += shift(Tc[:,i], k, fill='last')
+                TTc[k,:,i] += shift(Tc[:,i], k)
         TTc /= 2 # average
 
         # Now loop through each DOF to make the 2nd order spectrum
