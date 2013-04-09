@@ -1,0 +1,49 @@
+
+structure:
+  platform:
+    mass: 7466330
+    inertia: [4229230000, 4229230000, 164230000] # about CoM
+    CoM: [0, 0, -89.9155]
+
+  tower:
+    mass: 249718
+    inertia: [118.24e+6, 118.24e+6, 0] # about CoM
+    CoM: [0, 0, 43.4]
+
+  nacelle:
+    mass: 240000
+    height: 87.6
+
+  rotor:
+    mass: 110000
+    inertia: [38776410, 24746020, 24746020]
+          
+hydrodynamics:
+  WAMIT path: '../1. Models/OCC/OC3_Hywind/HydroData/spar'
+  #  displaced volume: 8025.66
+  #  CoB: [0, 0, -61.719]
+
+  QTF path: '../1. Models/OC3_Hywind_QTFs.h5'
+
+  extra damping: [1.0e+5, 1.0e+5, 1.3e+5, 0, 0, 1.3e+7]
+
+  Morison elements:
+    drag coefficient: 0.7
+    members:
+      - end1: [0, 0, 0]
+        end2: [0, 0, -120]
+        diameter: [[0, 4, 12, 120], [6.5, 6.5, 9.4, 9.4]]
+        strip width: 1.0
+  
+mooring:
+  linear:
+    static force: [0, 0, -1607000, 0, 0, 0]
+    stiffness: 
+      - [41180,    0,       0,     0,        -2816000,   0       ]
+      - [0,        41180,   0,     2816000,   0,         0       ]
+      - [0,        0,       11940, 0,         0,         0       ]
+      - [0,        2816000, 0,     311100000, 0,         0       ]
+      - [-2816000, 0,       0,     0,         311100000, 0       ]
+      - [0,        0,       0,     0,         0,         11560000]
+    
+    
