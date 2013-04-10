@@ -21,8 +21,12 @@ class ViscousDragModel(object):
         s_centres = np.array([(i+0.5) * strip_width for i in range(n_strips)])
         self.element_lengths = strip_width * np.ones(n_strips)
         self.element_centres = np.asarray(m['end1']) + s_centres[:,np.newaxis] * nvec[np.newaxis,:]
-        diam_data = np.asarray(m['diameter'])
-        self.element_diameters = np.interp(s_centres, diam_data[0], diam_data[1])
+
+        if np.isscalar(m['diameter']):
+            self.element_diameters = m['diameter'] * np.ones(n_strips)
+        else:
+            diam_data = np.asarray(m['diameter'])
+            self.element_diameters = np.interp(s_centres, diam_data[0], diam_data[1])
 
         # Element axes -- for now hard coded XXX
         # local Z axis is longitudinal; write as transformation matrix R so x=RX
@@ -51,7 +55,7 @@ class ViscousDragModel(object):
         for iel in range(H_us.shape[1]):
             xs = skew(self.element_centres[iel])
             for j in range(H_us.shape[0]):
-                H_us[j, iel, :] = (-w[j] * (H[j,:3] - dot(xs, H[j,3:])))
+                H_us[j, iel, :] = (1j*w[j] * (H[j,:3] - dot(xs, H[j,3:])))
         return H_us
 
     def local_relative_velocity_transfer_functions(self, w, H):
