@@ -1,16 +1,15 @@
 import numpy as np
-from numpy import newaxis, dot
-from scipy import integrate
+from numpy import newaxis, dot, pi
 
-from whales.stats_helpers import binorm_expectation
-from whales.utils import skew, output_variance
+from whales.utils import skew, output_variance, binorm_expectation
 
 g = 9.81
 
 class ViscousDragModel(object):
     """Represent and linearise viscous drag on elements"""
     def __init__(self, config):
-        self.Cd = config['drag coefficient']
+        self.Cd = config.get('drag coefficient', 0.0)
+        self.Cm = config.get('inertia coefficient', 1.0)
         if len(config['members']) != 1:
             raise NotImplementedError("not generalised for multiple members yet")
         m = config['members'][0]
@@ -57,17 +56,6 @@ class ViscousDragModel(object):
             for j in range(H_us.shape[0]):
                 H_us[j, iel, :] = (1j*w[j] * (H[j,:3] - dot(xs, H[j,3:])))
         return H_us
-
-    def local_relative_velocity_transfer_functions(self, w, H):
-        """Return the transfer functions for relative flow velocity in the
-        two locally-perpendicular directions (from wave elevation)
-        Ref: Langley1984
-        """
-        H_rel = (self.wave_velocity_transfer_function(w) -
-                 self.structural_velocity_transfer_function(w, H))
-
-        Hi = self.resolve_perpendicular_to_elements(H_rel)
-        return Hi
 
     def local_linearised_drag_force(self, wc, wv_sigma):
         """Calculate coefficients A & b so F_local = A w_v + b.
@@ -131,8 +119,11 @@ class ViscousDragModel(object):
         """
 
         # Calculate standard deviations of relative velocity
-        Hi = self.local_relative_velocity_transfer_functions(w, H_wave)
-        wv_sigma = np.sqrt(output_variance(w, Hi, S_wave))
+        # Ref: Langley1984
+        H_rel = (self.wave_velocity_transfer_function(w) -
+                 self.structural_velocity_transfer_function(w, H_wave))
+        H_rel_local = self.resolve_perpendicular_to_elements(H_rel)
+        wv_sigma = np.sqrt(output_variance(w, H_rel_local, S_wave))
 
         # Assume current is equal everywhere unless specified otherwise
         # Resolve into local perpendicular velocities
@@ -149,6 +140,25 @@ class ViscousDragModel(object):
         A = np.einsum('eip,epq,ejq->eij', P, A_local, P)
 
         return A, b
+
+    def normal_accelerations(self, w, H_wave):
+        """Calculate the fluid & structure accelerations normal to each element
+         - w are the frequencies used to calculate H_wave
+        """
+
+        # For added mass: calculate local normal structural acceleration for unit wave
+        a_struct = 1j * w * self.structural_velocity_transfer_function(w, H_wave)
+        a_struct_local = self.resolve_perpendicular_to_elements(a_struct)
+
+        # For inertial force: calculate local normal fluid acceleration for unit wave
+        a_fluid = 1j * w * self.wave_velocity_transfer_function(w)
+        a_fluid_local = self.resolve_perpendicular_to_elements(a_fluid)
+
+        # Transform results back to global coordinates
+        P = self.element_axes[:,:,0:2] # transformation matrix [n1 n2]
+        a_struct = np.einsum('eip,ep->ei', P, a_struct_local)
+        a_fluid  = np.einsum('eip,ep->ei', P, a_fluid_local)
+        return a_struct, a_fluid
 
     def resolve_perpendicular_to_elements(self, v):
         """Resolve a velocity ``v`` into 2 components normal to each element"""
@@ -231,3 +241,57 @@ class ViscousDragModel(object):
                 Fvv[iw] += C * dot(L, dot(A[iel], H_uf[iw, iel, :]))
 
         return Bv, Fvc, Fvv
+
+    def Morison_added_mass(self):
+        """Calculate added mass matrix from Morison elements"""
+
+        # Define the matrix which transforms the 6 rigid-body DOFs
+        # into the acceleration at each element
+        L = np.array([np.c_[np.eye(3), -skew(x)] for x in self.element_centres])
+
+        # Only normal accelerations count -- subtract the longitudinal
+        # component at each element:  at = (a . t) t
+        t = self.element_axes[:,:,2]
+        a = L
+        at = np.einsum('eix,ei,ej->ejx', a, t, t)
+        an = a - at
+
+        # Added mass force for each element (Nel x 3 x 6)
+        F_added = ((self.Cm - 1) * 1025 *
+                   (pi*self.element_diameters[:,newaxis,newaxis]**2/4) *
+                   self.element_lengths[:,newaxis,newaxis] * an)
+
+        # Sum up to get total resultant force and moment
+        #  A = sum [ L.T * F_added ]
+        A = np.einsum('eix,eiy->xy', L, F_added)
+        return A
+
+    def Morison_inertial_force(self, w):
+        r"""Calculate the Morison inertial force
+        """
+
+        # XXX
+        rho = 1025
+
+        # Define the matrix which transforms the 6 rigid-body DOFs
+        # into the acceleration at each element
+        L = np.array([np.c_[np.eye(3), -skew(x)] for x in self.element_centres])
+
+        # For inertial force: calculate normal fluid acceleration for unit wave
+        a_fluid = 1j * w[:,newaxis,newaxis] * self.wave_velocity_transfer_function(w)
+
+        # Only normal accelerations count -- subtract the longitudinal
+        # component at each element:  at = (a . t) t
+        t = self.element_axes[:,:,2]
+        at = np.einsum('wei,ei,ej->wej', a_fluid, t, t)
+        an = a_fluid - at
+
+        # Added mass force for each element (Nel x 3 x 6)
+        F_inertial = (self.Cm * rho *
+                      (pi*self.element_diameters[newaxis,:,newaxis]**2/4) *
+                      self.element_lengths[newaxis,:,newaxis] * an)
+
+        # Sum up to get total resultant force and moment
+        #  A = sum [ L.T * F_added ]
+        F = np.einsum('eix,wei->wx', L, F_inertial)
+        return F

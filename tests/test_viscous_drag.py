@@ -49,6 +49,7 @@ class CylinderTestCase(MyTestCase):
     def setUp(self):
         config = {
             'drag coefficient': 0.7,
+            'inertia coefficient': 2.0,
             'members': [{
                 'end1': [0, 0, 0],
                 'end2': [0, 0, -10],
@@ -120,6 +121,13 @@ class CylinderTestCase(MyTestCase):
         self.assertArraysEqual(H_us[0,-1,1], 9.5 * 1j)
         self.assertArraysEqual(H_us[1,-1,1], 9.5 * 2j)
 
+    def test_added_mass(self):
+        """Test added mass calculation from Morison elements"""
+
+        A = self.model.Morison_added_mass()
+
+        # Expected surge added mass: (Cm-1) * rho * V
+        self.assertEqual(A[0,0], 1 * 1025 * 10 * np.pi * 2.3**2 / 4)
 
 class ResolvingTestCase(MyTestCase):
     """Test differently-oriented members"""

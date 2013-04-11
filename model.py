@@ -85,9 +85,21 @@ class HydrodynamicsInfo(object):
                 #Tc = np.r_[ Tc[0:1,:], Tc ]
             self.Tc = interpolate.interp1d(w_Tc, Tc, axis=0)
 
-    def wave_drift_damping(self):
-        warnings.warn("Wave drift damping not implemented")
-        return np.zeros((6,6))
+    def wave_drift_damping(self, w, S_wave):
+        """Calculate wave-drift damping coefficient"""
+        Tc = self.Tc(w)
+        # Only include surge and sway
+        # XXX is this right? do I need to treat sway differently?
+        dTc_dw  = np.gradient(Tc, w[1] - w[0])[0] # gradient along axis 0
+
+        integrand = S_wave[:,newaxis] * (4 * w[:,newaxis] * Tc +
+                                         w[:,newaxis]**2 * dTc_dw) / g
+        B12 = integrate.simps(integrand, w, axis=0)
+
+        B = np.zeros((6,6))
+        B[0,0] = B12[0]
+        B[1,1] = B12[1]
+        return B
 
     def first_order_force_spectrum(self, w, S_wave, heading=0):
         ih = np.nonzero(self.wamit.headings == heading)[0][0]
@@ -199,19 +211,27 @@ class FloatingTurbineModel(object):
     #### Response
     def transfer_function(self, ws, added_mass=True, radiation_damping=True,
                           drift_damping=True, extra_damping=True,
-                          viscous_damping=None):
+                          viscous_damping=None, S_wave=None):
 
         if viscous_damping is None:
             viscous_damping = np.zeros((6,6))
+        if drift_damping:
+            if S_wave is None:
+                raise ValueError("Need wave spectrum to calculate wave drift damping")
+            wave_drift_damping = self.hydro_info.wave_drift_damping(ws, S_wave)
+        else:
+            wave_drift_damping = np.zeros((6,6))
 
         M, A, B = self.M, self.A, self.B
         C = self.C_hydro + self.C_grav + self.C_lines
         H = np.empty((len(ws), 6, 6), dtype=np.complex)
+
+        print wave_drift_damping[0,0], viscous_damping[0,0], self.extra_damping[0,0]
+
         for i,w in enumerate(ws):
             Mi = M + (added_mass * A(w))
             Bi = ((radiation_damping * B(w)) + viscous_damping +
-                  (drift_damping * self.hydro_info.wave_drift_damping()) +
-                  (extra_damping * self.extra_damping))
+                  wave_drift_damping + (extra_damping * self.extra_damping))
             H[i,:,:] = linalg.inv(-(w**2)*Mi + 1j*w*Bi + C)
         return H
 
