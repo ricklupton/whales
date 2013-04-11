@@ -3,7 +3,7 @@ from numpy import newaxis, dot
 from scipy import integrate
 
 from whales.stats_helpers import binorm_expectation
-from whales.utils import skew
+from whales.utils import skew, output_variance
 
 g = 9.81
 
@@ -69,21 +69,6 @@ class ViscousDragModel(object):
         Hi = self.resolve_perpendicular_to_elements(H_rel)
         return Hi
 
-    def local_relative_velocity_variance(self, w, H_wave, S_wave):
-        """Integrate wave spectrum with local normal velocity to give
-        cross-variances of velocities.
-        $$ \sigma_{ij}^2 = \mathrm{Re} \int_0^{\infty} H_i(\omega)
-        H_j(\omega) S_{\eta\eta}(\omega) \;\mathrm{d}\omega \qquad (i, j = 1, 2)$$
-        """
-        Hi = self.local_relative_velocity_transfer_functions(w, H_wave)
-        s = np.zeros((Hi.shape[1], 2, 2))
-        for i in range(2):
-            for j in range(2):
-                I = integrate.trapz((Hi[:,:,i] * Hi[:,:,j].conj() *
-                                     S_wave[:,newaxis]), x=w, axis=0)
-                s[:,i,j] = np.sqrt(I.real)
-        return s
-
     def local_linearised_drag_force(self, wc, wv_sigma):
         """Calculate coefficients A & b so F_local = A w_v + b.
         w_v is the local perpendicular varying relative velocity.
@@ -146,7 +131,8 @@ class ViscousDragModel(object):
         """
 
         # Calculate standard deviations of relative velocity
-        wv_sigma = self.local_relative_velocity_variance(w, H_wave, S_wave)
+        Hi = self.local_relative_velocity_transfer_functions(w, H_wave)
+        wv_sigma = np.sqrt(output_variance(w, Hi, S_wave))
 
         # Assume current is equal everywhere unless specified otherwise
         # Resolve into local perpendicular velocities
