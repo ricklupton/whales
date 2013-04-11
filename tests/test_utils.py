@@ -1,6 +1,7 @@
-import utils
+from whales import utils
 import numpy as np
 from numpy.testing import assert_array_equal, assert_allclose
+from nose.plugins.skip import SkipTest
 
 def test_skew():
     assert np.allclose(utils.skew(np.zeros(3)), np.zeros((3,3)))
@@ -53,3 +54,16 @@ def test_output_variance():
 def test_output_variance_complex():
     assert False
     # Check conjugate is in right place
+
+
+#### STATS #####
+
+def test_stats():
+    raise SkipTest("too slow")
+    bne = utils.binorm_expectation
+    assert np.allclose(bne(lambda xy: [1,1], np.array([[1,0],[0,0]])), [1,1])
+    assert np.allclose(bne(lambda xy: 1,     np.array([[1,0],[0,0]])), 1    )
+    assert np.allclose(bne(lambda xy: 1,     np.array([[0,0],[0,1]])), 1    )
+    assert np.allclose(bne(lambda xy: 1,     np.array([[1,0],[0,1]])), 1    )
+    assert np.allclose(bne(lambda xy: [1,1], np.array([[1,0],[0,1]])), [1,1])
+    assert np.allclose(bne(lambda xy: xy,    np.array([[1,0],[0,0]])), [0,0])
