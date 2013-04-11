@@ -28,7 +28,7 @@ hydrodynamics:
   extra damping: [1.0e+5, 1.0e+5, 1.3e+5, 0, 0, 1.3e+7]
 
   Morison elements:
-    drag coefficient: 0.7
+    drag coefficient: 0.6
     members:
       - end1: [0, 0, 0]
         end2: [0, 0, -120]
