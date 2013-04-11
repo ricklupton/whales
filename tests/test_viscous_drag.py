@@ -128,23 +128,23 @@ class ResolvingTestCase(MyTestCase):
         config = {
             'drag coefficient': 0.7,
             'members': [{
-                # Member in x-direction
-                'end1': [0, 0, 0],
-                'end2': [1, 0, 0],
-                'diameter': 1,
-                'strip width': 1,
-            }, {
+            #     # Member in x-direction
+            #     'end1': [0, 0, 0],
+            #     'end2': [1, 0, 0],
+            #     'diameter': 1,
+            #     'strip width': 1,
+            # }, {
                 # Member in z-direction
                 'end1': [0, 0, 0],
                 'end2': [0, 0, 1],
                 'diameter': 1,
                 'strip width': 1,
-            }, {
-                # Member in xy plane at 30deg from x axis
-                'end1': [0, 0, 0],
-                'end2': [np.cos(30*np.pi/180), np.sin(30*np.pi/180), 0],
-                'diameter': 1,
-                'strip width': 1,
+            # }, {
+            #     # Member in xy plane at 30deg from x axis
+            #     'end1': [0, 0, 0],
+            #     'end2': [np.cos(30*np.pi/180), np.sin(30*np.pi/180), 0],
+            #     'diameter': 1,
+            #     'strip width': 1,
             }],
         }
         self.model = ViscousDragModel(config)
@@ -156,8 +156,15 @@ class ResolvingTestCase(MyTestCase):
         # Test 1: velocity in x-direction
         v1 = [1, 0, 0]
         self.assertArraysEqual(resolve(v1), [
-            [0, 0], # member in x-direction, no normal velocity
+#            [0, 0], # member in x-direction, no normal velocity
             [1, 0], # member in z-direction
-            [np.nan, np.nan], # member 30deg from x-axis
+#            [np.nan, np.nan], # member 30deg from x-axis
         ])
-        # incomplete
+
+        # Test 1: velocity in 3d
+        v2 = [1, 1, 2]
+        self.assertArraysEqual(resolve(v2), [
+#            [0, 0], # member in x-direction, no normal velocity
+            [1, 1], # member in z-direction
+#            [np.nan, np.nan], # member 30deg from x-axis
+        ])
