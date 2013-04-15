@@ -14,7 +14,7 @@ if '../1. Models' not in sys.path: sys.path.insert(0, '../1. Models')
 import WAMIT
 
 from whales.viscous_drag import ViscousDragModel
-from whales.utils import skew, shift
+from whales.utils import skew, shift, response_spectrum
 
 g = 9.81
 
@@ -105,10 +105,7 @@ class HydrodynamicsInfo(object):
         ih = np.nonzero(self.wamit.headings == heading)[0][0]
         # Interpolate complex wave excitation force
         X = self.X(w)[:,ih,:]
-        # Calculate spectrum (diagonal)
-        S1 = np.zeros((len(w), 6, 6))
-        S1[:,[0,1,2,3,4,5],[0,1,2,3,4,5]] = abs(X)**2 * S_wave[:,np.newaxis]
-        return S1
+        return response_spectrum(X, S_wave)
 
     def second_order_force_spectrum(self, w, S_wave, heading=0):
         """Calculate the 2nd order force spectrum defined by

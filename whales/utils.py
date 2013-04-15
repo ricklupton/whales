@@ -1,6 +1,6 @@
 from __future__ import division
 import numpy as np
-from numpy import pi, inf
+from numpy import pi, inf, newaxis
 from scipy.integrate import quad, dblquad, trapz
 
 def skew(x):
@@ -35,6 +35,15 @@ def output_variance(w, H, S):
     y = np.einsum('w...i,w...j,w...->w...ij', H, H.conj(), S)
     s = trapz(y, x=w, axis=0).real
     return s
+
+def response_spectrum(H, S):
+    """Return the response spectrum given transfer function ``H`` and input spectrum ``S``"""
+    if S.ndim == 1:
+        H = H[:,:,newaxis]
+        S = S[:,newaxis,newaxis]
+    elif S.ndim != 3:
+        raise ValueError()
+    return np.einsum('wir,wjs,wrs->wij', H, H.conj(), S)
 
 ########### STATS HELPERS ###############
 def normal_distribution(x, sigma):
