@@ -3,16 +3,12 @@ Input for floating wind turbine model
 """
 
 import numpy as np
-from numpy import linalg, newaxis, dot
+from numpy import linalg, newaxis
 from scipy import interpolate, integrate
 import h5py
 import yaml
-import warnings
 
-import sys
-if '../1. Models' not in sys.path: sys.path.insert(0, '../1. Models')
-import WAMIT
-
+from whales import WAMIT
 from whales.viscous_drag import ViscousDragModel
 from whales.utils import skew, shift, response_spectrum
 
