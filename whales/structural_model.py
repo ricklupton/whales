@@ -39,7 +39,7 @@ class FloatingTurbineStructure(object):
                                         offset=s['platform']['CoM'])
         platform = RigidBody('platform',
                              mass=s['platform']['mass'],
-                             inertia=np.diag(s['platform']['interia']))
+                             inertia=np.diag(s['platform']['inertia']))
         free_joint.add_leaf(conn_platform)
         conn_platform.add_leaf(platform)
 
@@ -97,9 +97,10 @@ class FloatingTurbineStructure(object):
         # Constrain missing DOFs -- tower torsion & extension not complete
         self.system.prescribe(tower, vel=0, part=[0, 3])
 
-    def linearised_matrices(self, z0=None):
+    def linearised_matrices(self, z0=None, perturbation=None):
         if z0 is None:
             z0 = np.zeros(len(self.system.q.dofs))
         self.system.update_kinematics()
-        linsys = LinearisedSystem.from_system(self.system, z0=z0)
+        linsys = LinearisedSystem.from_system(self.system, z0=z0,
+                                              perturbation=perturbation)
         return linsys.M, linsys.C, linsys.K

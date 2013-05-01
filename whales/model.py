@@ -3,26 +3,35 @@ Input for floating wind turbine model
 """
 
 import numpy as np
-from numpy import linalg, newaxis
-from scipy import interpolate, integrate
+from numpy import linalg, newaxis, zeros_like
+from scipy import interpolate, integrate, linalg
 import h5py
 import yaml
 
 from whales.io import WAMITData, SecondOrderData
 from whales.viscous_drag import ViscousDragModel
-from whales.utils import skew, response_spectrum
 
 from whales.structural_model import FloatingTurbineStructure
 from whales.hydrodynamics import HydrodynamicsInfo
 
 
 class FloatingTurbineModel(object):
-    def __init__(self, config):
+    def __init__(self, config, frequency_values):
+        self.config = config
+        self.w = frequency_values
+
         # Build structural model
         self.structure = FloatingTurbineStructure(config['structure'])
 
         # Get hydrodynamic/static information
-        self.hydro_info = HydrodynamicsInfo(config['hydrodynamics'])
+        h = config['hydrodynamics']
+        rho = config['constants']['water density']
+        first_order = WAMITData(h['WAMIT path'], water_density=rho)
+        if 'QTF path' in h:
+            second_order = SecondOrderData(h['QTF path'], water_density=rho)
+        else:
+            second_order = None
+        self.hydro_info = HydrodynamicsInfo(first_order, second_order)
 
         # Get mooring line behaviour
         l = config['mooring']['linear']
@@ -30,122 +39,107 @@ class FloatingTurbineModel(object):
         self.mooring_stiffness = np.asarray(l['stiffness'])
 
         # Extra damping
-        self.extra_damping = np.asarray(
-            config['hydrodynamics'].get('extra damping', np.zeros(6)))
-        if self.extra_damping.ndim == 1:
-            self.extra_damping = np.diag(self.extra_damping)
+        self.B_extra = np.asarray(h.get('extra damping', np.zeros(6)))
+        if self.B_extra.ndim == 1:
+            self.B_extra = np.diag(self.B_extra)
 
         # Viscous drag model
-        self.morison = ViscousDragModel(
-            config['hydrodynamics']['Morison elements'])
+        self.morison = ViscousDragModel(h['Morison elements'])
         self.Bv = np.zeros((6, 6))
         self.Fvc = np.zeros(6)
-        self.Fvv = np.zeros(6)
+        self.Fvv = np.zeros((len(self.w), 6))
 
         # Wave-drift damping
         self.Bwd = np.zeros((6, 6))
 
-    def calculate_viscous_effects(self, ws, S_wave):
+    def calculate_viscous_effects(self, S_wave):
         """
         Calculate viscous forces and damping with the given wave spectrum.
 
         Note that this can be iterative, as the transfer functions will be
         re-calculated using previously-calculated viscous effects.
         """
-        H_wave = self.transfer_function_from_wave_elevation(ws, S_wave)
-        Bv, Fvc, Fvv = self.morison.total_drag(ws, H_wave, S_wave)
-        self.Bv, self.Fvc, self.Fvv = Bv, Fvc, Fvv
+        assert len(S_wave) == len(self.w)
+        H_wave = self.transfer_function_from_wave_elevation(self.w, S_wave)
+        self.Bv, self.Fvc, self.Fvv = self.morison.total_drag(self.w, H_wave,
+                                                              S_wave)
 
-    def calculate_wave_drift_damping(self, ws, S_wave):
+    def calculate_wave_drift_damping(self, S_wave):
         """
         Calculate and save wave-drift damping matrix
         """
-        self.Bwd = self.hydro_info.wave_drift_damping(ws, S_wave)
+        assert len(S_wave) == len(self.w)
+        self.Bwd = self.hydro_info.wave_drift_damping(self.w, S_wave)
 
-    def transfer_function(self, ws):
+    def linearised_matrices(self, w):
+        """
+        Linearise the structural model and add in the hydrodynamic
+        added-mass and damping for the given frequency ``w``, as well
+        as the hydrostatic stiffness, wave-drift damping and viscous damping.
+        """
+        # Structural - includes gravitational stiffness
+        M, B, C, = self.structure.linearised_matrices(perturbation=1e-4)
+        M[:6, :6] += self.hydro_info.A(w)
+        B[:6, :6] += self.hydro_info.B(w) + self.Bv + self.Bwd + self.B_extra
+        C[:6, :6] += self.hydro_info.C + self.mooring_stiffness
+        return M, B, C
+
+    def coupled_modes(self, w):
+        M, B, C = self.linearised_matrices(w)
+        wn, vn = linalg.eig(C, M)
+        order = np.argsort(wn)
+        wn = np.sqrt(np.real(wn[order]))
+        vn = vn[:, order]
+        return wn, vn
+
+    def transfer_function(self):
         """
         Linearise the structural model and return multi-dof transfer function
         for the structure, including mooring lines and hydrodynamics, at the
         given frequencies ``ws``
         """
 
-        # Structural
+        # Structural - includes gravitational stiffness
         M_struct, B_struct, C_struct = self.structure.linearised_matrices()
 
-        hydro = self.hydro_info
-        C = hydro.C + self.C_grav + self.C_lines
-        H = np.empty((len(ws), 6, 6), dtype=np.complex)
+        # Mull matrices to be assembled at each frequency
+        Mi = zeros_like(M_struct)
+        Bi = zeros_like(B_struct)
+        Ci = zeros_like(C_struct)
 
-        for i, w in enumerate(ws):
-            Mi = M + hydro.A(w)
-            Bi = hydro.B(w) + self.Bv + self.Bwd + self.extra_damping
+        # Stiffness is constant -- add hydrostatics and mooring lines
+        Ci[:6, :6] = self.hydro_info.C + self.mooring_stiffness
 
-            H[i,:,:] = linalg.inv(-(w**2)*Mi + 1j*w*Bi + C)
+        # Calculate transfer function at each frequency
+        H = np.empty((len(self.w),) + M_struct.shape, dtype=np.complex)
+        for i, w in enumerate(self.w):
+            Mi[:, :] = M_struct
+            Bi[:, :] = B_struct
+            Mi[:6, :6] += self.hydro_info.A(w)  # add rigid-body parts
+            Bi[:6, :6] += (self.hydro_info.B(w) + self.Bv + self.Bwd +
+                           self.extra_damping)
+            H[i, :, :] = linalg.inv(-(w**2)*Mi + 1j*w*Bi + Ci)
         return H
 
-    @property
-    def gravitational_stiffness(self):
-        # XXX is this general?
-        C = np.zeros((6,6))
-        C[3,3] = C[4,4] = -g * sum(b.position[2]*b.mass for b in self.bodies)
-        return C
-    C_grav = gravitational_stiffness
+    def transfer_function_from_wave_elevation(self, heading=0):
+        """
+        Calculate the transfer function from wave elevation to response,
+        similar to ``transfer_function(ws)`` but including the wave excitation
+        force ``X``.
+        """
+        H = self.transfer_function()
+        X = self.hydro_info.X(self.w, heading)  # interpolate
 
-    #C_lines = mooring_stiffness
+        # Add in the viscous drag force due to waves
+        X += self.Fvv
+        X[self.w == 0] += self.Fvc  # constant drag force
 
-    #### Response
-    def transfer_function(self, ws, added_mass=True, radiation_damping=True,
-                          drift_damping=True, extra_damping=True,
-                          viscous_damping=None, S_wave=None):
-
-        if viscous_damping is None:
-            viscous_damping = np.zeros((6,6))
-        if drift_damping:
-            if S_wave is None:
-                raise ValueError("Need wave spectrum to calculate wave drift damping")
-            wave_drift_damping = self.hydro_info.wave_drift_damping(ws, S_wave)
-        else:
-            wave_drift_damping = np.zeros((6,6))
-
-        M, A, B = self.M, self.A, self.B
-        C = self.C_hydro + self.C_grav + self.C_lines
-        H = np.empty((len(ws), 6, 6), dtype=np.complex)
-
-        print wave_drift_damping[0,0], viscous_damping[0,0], self.extra_damping[0,0]
-
-        for i,w in enumerate(ws):
-            Mi = M + (added_mass * A(w))
-            Bi = ((radiation_damping * B(w)) + viscous_damping +
-                  wave_drift_damping + (extra_damping * self.extra_damping))
-            H[i,:,:] = linalg.inv(-(w**2)*Mi + 1j*w*Bi + C)
-        return H
-
-    def transfer_function_from_wave_elevation(self, ws, heading=0,
-                                              viscous_drag=None, **tf_options):
-        ih = np.nonzero(self.hydro_info.wamit.headings == heading)[0][0]
-        H = self.transfer_function(ws, **tf_options)
-        X = self.hydro_info.X(ws) # interpolate
-        X = X[:,ih,:]
-
-        # Add in the viscous drag force due to waves (the constant
-        # current part is not included here)
-        if viscous_drag is not None:
-            X += viscous_drag
-
+        # Multiply transfer functions to get overall transfer function
         H_wave = np.einsum('wij,wj->wi', H, X)
         return H_wave
 
-    def response_spectrum(self, ws, force_spectrum, **options):
-        """Calculate the response spectrum using the eqn from Naess2013 (9.79):
-        $$ S_{x_i x_j} = \sum_r \sum_s H_{ir}(\omega) H_{js}^{*}(\omega)
-        S_{F_r F_s}(\omega) $$
-        """
-        H = self.transfer_function(ws, **options)
-        Sx = np.einsum('wir,wjs,wrs->wij', H, H.conj(), force_spectrum)
-        return Sx
-
     @classmethod
-    def from_yaml(cls, filename):
+    def from_yaml(cls, filename, freq):
         with open(filename) as f:
             config = yaml.safe_load(f)
-        return cls(config)
+        return cls(config, freq)

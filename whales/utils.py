@@ -36,11 +36,16 @@ def output_variance(w, H, S):
     s = trapz(y, x=w, axis=0).real
     return s
 
+
 def response_spectrum(H, S):
-    """Return the response spectrum given transfer function ``H`` and input spectrum ``S``"""
+    """Return the response spectrum given transfer function ``H`` and input
+    spectrum ``S`` using the eqn from Naess2013 (9.79):
+    $$ S_{x_i x_j} = \sum_r \sum_s H_{ir}(\omega) H_{js}^{*}(\omega)
+    S_{F_r F_s}(\omega) $$
+    """
     if S.ndim == 1:
-        H = H[:,:,newaxis]
-        S = S[:,newaxis,newaxis]
+        H = H[:, :, newaxis]
+        S = S[:, newaxis, newaxis]
     elif S.ndim != 3:
         raise ValueError()
     return np.einsum('wir,wjs,wrs->wij', H, H.conj(), S)

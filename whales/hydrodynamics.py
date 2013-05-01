@@ -18,8 +18,7 @@ class HydrodynamicsInfo(object):
         # Make interpolators
         self.A = interp1d(first_order_data.w, first_order_data.A, axis=0)
         self.B = interp1d(first_order_data.w, first_order_data.B, axis=0)
-        self.C = self.wamit.C
-        self.X = interp1d(first_order_data.w, first_order_data.X, axis=0)
+        self.C = first_order_data.C
 
         # QTFs
         if second_order_data is not None:
@@ -27,6 +26,12 @@ class HydrodynamicsInfo(object):
                                second_order_data.Tc, axis=0)
         else:
             self.Tc = None
+
+    def X(self, w, heading):
+        Xh = interp1d(self.first_order_data.headings,
+                      self.first_order_data.X, axis=1)
+        Xw = interp1d(self.first_order_data.w, Xh(heading), axis=0)
+        return Xw(w)
 
     def wave_drift_damping(self, w, S_wave):
         """Calculate wave-drift damping coefficient"""
@@ -46,9 +51,8 @@ class HydrodynamicsInfo(object):
         return B
 
     def first_order_force_spectrum(self, w, S_wave, heading=0):
-        ih = np.nonzero(self.wamit.headings == heading)[0][0]
         # Interpolate complex wave excitation force
-        X = self.X(w)[:, ih, :]
+        X = self.X(w, heading)
         return response_spectrum(X, S_wave)
 
     def second_order_force_spectrum(self, w, S_wave, heading=0):
