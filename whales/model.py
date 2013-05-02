@@ -108,16 +108,16 @@ class FloatingTurbineModel(object):
         Ci = zeros_like(C_struct)
 
         # Stiffness is constant -- add hydrostatics and mooring lines
-        Ci[:6, :6] = self.hydro_info.C + self.mooring_stiffness
+        hh = self.hydro_info  # shorthand
+        Ci[:6, :6] = hh.C + self.mooring_stiffness
 
         # Calculate transfer function at each frequency
         H = np.empty((len(self.w),) + M_struct.shape, dtype=np.complex)
         for i, w in enumerate(self.w):
             Mi[:, :] = M_struct
             Bi[:, :] = B_struct
-            Mi[:6, :6] += self.hydro_info.A(w)  # add rigid-body parts
-            Bi[:6, :6] += (self.hydro_info.B(w) + self.Bv + self.Bwd +
-                           self.extra_damping)
+            Mi[:6, :6] += hh.A(w)  # add rigid-body parts
+            Bi[:6, :6] += hh.B(w) + self.Bv + self.Bwd + self.B_extra
             H[i, :, :] = linalg.inv(-(w**2)*Mi + 1j*w*Bi + Ci)
         return H
 
