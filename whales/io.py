@@ -3,7 +3,7 @@ Tools for loading WAMIT output data
 """
 
 import numpy as np
-from numpy import newaxis, pi
+from numpy import newaxis, pi, isinf
 import h5py
 from scipy import constants
 
@@ -49,6 +49,11 @@ class WAMITData(object):
         periods = np.array(period_list)
         headings = np.array(heading_list)
 
+        with np.errstate(divide='ignore'):
+            w = 2 * np.pi / periods
+        w[periods == -1] = 0
+        w[periods == 0] = np.inf
+
         # Rearrange the data
         self.A = np.zeros((len(periods), 6, 6))
         self.B = np.zeros((len(periods), 6, 6))
@@ -67,25 +72,22 @@ class WAMITData(object):
         for row in rest:
             self.C[row['i']-1, row['j']-1] = row['C']
 
-        # Re-dimensionalise
+        # Fix missing values for damping at zero and infinite frequency
+        self.B = np.nan_to_num(self.B)
+
+        # Re-dimensionalise (note damping should go to zero as w -> 0)
         self.A *= water_density
-        self.B *= water_density * (2 * pi / periods[:, newaxis, newaxis])
+        self.B[~isinf(w)] *= water_density * w[~isinf(w)][:, newaxis, newaxis]
+        self.B[isinf(w)] = 0
         self.C *= water_density * constants.g
         self.X *= water_density * constants.g
 
         # Re-arrange into frequency order (not period order)
-        # make smallest period very small instead of zero
-        w = 2 * np.pi / periods
-        w[periods == -1] = 0
-        w[periods == 0] = np.inf
-
-        # sort by frequency not period
         idx = np.argsort(w)
         self.w = w[idx]
         self.headings = headings
         self.A = self.A[idx]
-        # Damping goes to nan as w -> 0
-        self.B = np.nan_to_num(self.B[idx])
+        self.B = self.B[idx]
         self.X = self.X[idx]
 
 
