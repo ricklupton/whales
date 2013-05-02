@@ -144,6 +144,29 @@ class FloatingTurbineModel(object):
         H_wave = np.einsum('wij,wj->wi', H, X)
         return H_wave
 
+    def response_spectrum(self, S_wave, second_order=True, viscous=True):
+        """Convenience method which calculates the response spectrum
+        """
+        S1 = self.hydro_info.first_order_force_spectrum(self.w, S_wave)
+        if second_order:
+            S2 = self.hydro_info.second_order_force_spectrum(self.w, S_wave)
+        else:
+            S2 = zeros_like(S1)
+        if viscous:
+            self.calculate_viscous_effects(S_wave)
+            Sv = self.viscous_force_spectrum
+        else:
+            Sv = zeros_like(S1)
+        self.calculate_wave_drift_damping(S_wave)
+
+        # XXX this doesn't work well if second_order or viscous is set
+        # to False -- transfer_function() will use previously-calculated values
+
+        H = self.transfer_function()
+        SF = S1 + S2 + Sv
+        Sx = response_spectrum(H, SF)
+        return Sx
+
     @classmethod
     def from_yaml(cls, filename, freq):
         with open(filename) as f:
