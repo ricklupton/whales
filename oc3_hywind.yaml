@@ -1,4 +1,7 @@
 
+constants:
+  water density: 1000
+
 structure:
   platform:
     mass: 7466330

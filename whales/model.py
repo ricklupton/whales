@@ -3,14 +3,14 @@ Input for floating wind turbine model
 """
 
 import numpy as np
-from numpy import linalg, newaxis, zeros_like
+from numpy import linalg, newaxis, zeros_like, eye
 from scipy import interpolate, integrate, linalg
 import h5py
 import yaml
 
 from whales.io import WAMITData, SecondOrderData
 from whales.viscous_drag import ViscousDragModel
-
+from whales.utils import response_spectrum
 from whales.structural_model import FloatingTurbineStructure
 from whales.hydrodynamics import HydrodynamicsInfo
 
@@ -60,9 +60,14 @@ class FloatingTurbineModel(object):
         re-calculated using previously-calculated viscous effects.
         """
         assert len(S_wave) == len(self.w)
-        H_wave = self.transfer_function_from_wave_elevation(self.w, S_wave)
+        H_wave = self.transfer_function_from_wave_elevation()
         self.Bv, self.Fvc, self.Fvv = self.morison.total_drag(self.w, H_wave,
                                                               S_wave)
+
+        # Fvv is the actual force/unit wave height at each wave
+        # frequency -- to get the spectrum, it's like the first-order
+        # wave force spectrum.
+        self.viscous_force_spectrum = response_spectrum(self.Fvv, S_wave)
 
     def calculate_wave_drift_damping(self, S_wave):
         """
@@ -109,7 +114,8 @@ class FloatingTurbineModel(object):
 
         # Stiffness is constant -- add hydrostatics and mooring lines
         hh = self.hydro_info  # shorthand
-        Ci[:6, :6] = hh.C + self.mooring_stiffness
+        Ci[:, :] = C_struct
+        Ci[:6, :6] += hh.C + self.mooring_stiffness
 
         # Calculate transfer function at each frequency
         H = np.empty((len(self.w),) + M_struct.shape, dtype=np.complex)

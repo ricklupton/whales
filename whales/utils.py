@@ -34,6 +34,8 @@ def output_variance(w, H, S):
     assert H.shape[0] == len(w) == len(S)
     y = np.einsum('w...i,w...j,w...->w...ij', H, H.conj(), S)
     s = trapz(y, x=w, axis=0).real
+    # result maybe almost zero but negative - causes problems for sqrt
+    s[abs(s) < 1e-16] = 0
     return s
 
 
