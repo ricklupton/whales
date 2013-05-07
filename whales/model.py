@@ -141,7 +141,8 @@ class FloatingTurbineModel(object):
         X[self.w == 0] += self.Fvc  # constant drag force
 
         # Multiply transfer functions to get overall transfer function
-        H_wave = np.einsum('wij,wj->wi', H, X)
+        # (H can be larger than X if the model is flexible)
+        H_wave = np.einsum('wij,wj->wi', H[:, :, :6], X)
         return H_wave
 
     def response_spectrum(self, S_wave, second_order=True, viscous=True):
@@ -164,7 +165,7 @@ class FloatingTurbineModel(object):
 
         H = self.transfer_function()
         SF = S1 + S2 + Sv
-        Sx = response_spectrum(H, SF)
+        Sx = response_spectrum(H[:, :, :6], SF)
         return Sx
 
     @classmethod

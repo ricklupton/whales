@@ -20,7 +20,7 @@ def shift(A, n, fill=None):
     else:
         return np.r_[ fill * np.ones(-n), A[:n] ]
 
-def output_variance(w, H, S):
+def output_variance(w, H, S, round_to_zero=1e-5):
     """Calculate the variance of the output response described by the TF ``H``
 
     ``w`` is the frequency in rad/s
@@ -35,7 +35,7 @@ def output_variance(w, H, S):
     y = np.einsum('w...i,w...j,w...->w...ij', H, H.conj(), S)
     s = trapz(y, x=w, axis=0).real
     # result maybe almost zero but negative - causes problems for sqrt
-    s[abs(s) < 1e-16] = 0
+    s[abs(s) < round_to_zero] = 0
     return s
 
 

@@ -46,15 +46,19 @@ class ViscousDragModel(object):
         return H_uf
 
     def structural_velocity_transfer_function(self, w, H):
-        """Return the transfer functions from wave elevation to structure velocity
-        H: array of transfer functions (RAOs)
+        """Return the transfer functions from wave elevation to structure
+        velocity.
+         - H: array of transfer functions (RAOs)
+
         Returns: array (frequency, element, xyz)
         """
-        H_us = np.zeros((len(w), len(self.element_diameters), 3), dtype=np.complex)
+        H_us = np.zeros((len(w), len(self.element_diameters), 3),
+                        dtype=np.complex)
         for iel in range(H_us.shape[1]):
             xs = skew(self.element_centres[iel])
             for j in range(H_us.shape[0]):
-                H_us[j, iel, :] = (1j*w[j] * (H[j,:3] - dot(xs, H[j,3:])))
+                # H may have more than 6 DOFs if model is flexible
+                H_us[j, iel, :] = (1j*w[j] * (H[j, 0:3] - dot(xs, H[j, 3:6])))
         return H_us
 
     def local_linearised_drag_force(self, wc, wv_sigma):
