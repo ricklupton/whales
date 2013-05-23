@@ -6,7 +6,7 @@ import numpy as np
 from numpy import dot, pi
 from mbwind.utils import rotmat_x, rotmat_y
 from mbwind.core import System
-from mbwind.elements import (FreeJoint, RigidBody, RigidConnection,
+from mbwind.elements import (FreeJoint, RigidBody, RigidConnection, Hinge,
                              ModalElement, DistalModalElementFromScratch)
 from mbwind.modes import ModesFromScratch
 from mbwind.blade import Tower
@@ -110,6 +110,10 @@ class FloatingTurbineStructure(object):
                 offset=np.array([0, 0, s['nacelle']['height']]))
             free_joint.add_leaf(conn_rotor)
 
+        # The drive shaft rotation (rotation about x)
+        shaft = Hinge('shaft', [1, 0, 0])
+        conn_rotor.add_leaf(shaft)
+
         # The blades
         if self.blade_modes:
             rtlen = s['rotor']['root length']
@@ -120,12 +124,12 @@ class FloatingTurbineStructure(object):
                                        offset=dot(R, [0, 0, rtlen]),
                                        rotation=dot(R, Ryx))
                 blade = ModalElement('blade%d' % (i+1), self.blade_modes)
-                conn_rotor.add_leaf(root)
+                shaft.add_leaf(root)
                 root.add_leaf(blade)
         else:
             rotor = RigidBody('rotor', s['rotor']['mass'],
                               np.diag(s['rotor']['inertia']))
-            conn_rotor.add_leaf(rotor)
+            shaft.add_leaf(rotor)
 
         # Build system
         self.system = System(free_joint)
@@ -151,6 +155,12 @@ class FloatingTurbineStructure(object):
         if what in ('rotor', 'all'):
             for i in range(3):
                 self.system.free(self.system.elements['blade%d' % (i+1)])
+
+    def set_shaft_lock(self, locked):
+        if locked:
+            self.system.prescribe(self.system.elements['shaft'], vel=0)
+        else:
+            self.system.free(self.system.elements['shaft'])
 
     def linearised_matrices(self, z0=None, perturbation=None):
         if z0 is None:
