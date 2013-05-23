@@ -162,10 +162,65 @@ class FloatingTurbineStructure(object):
         else:
             self.system.free(self.system.elements['shaft'])
 
-    def linearised_matrices(self, z0=None, perturbation=None):
+    def linearised_system(self, z0=None, zd0=None, mbc=False,
+                          perturbation=None):
         if z0 is None:
-            z0 = np.zeros(len(self.system.q.dofs))
+            z0_values = np.zeros(len(self.system.q.dofs))
+        elif isinstance(z0, dict):
+            # Dictionary of {element-name: dof-value-list} items
+            z0_values = np.zeros(len(self.system.q.dofs))
+            for element_name, element_dofs in z0.items():
+                istrain = self.system.elements[element_name]._istrain
+                idofs = self.system.qd.dofs.subset
+                for i, dof in zip(istrain, element_dofs):
+                    try:
+                        z0_values[idofs.index(i)] = dof
+                        print "Set z0[%d] (%s) to %g" % (
+                            idofs.index(i), element_name, dof)
+                    except IndexError:
+                        print "Not setting DOF %d" % i
+                        pass
+        else:
+            z0_values = z0
+
+        if zd0 is None:
+            zd0_values = np.zeros(len(self.system.q.dofs))
+        elif isinstance(zd0, dict):
+            # Dictionary of {element-name: dof-value-list} items
+            zd0_values = np.zeros(len(self.system.q.dofs))
+            for element_name, element_dofs in zd0.items():
+                istrain = self.system.elements[element_name]._istrain
+                idofs = self.system.qd.dofs.subset
+                for i, dof in zip(istrain, element_dofs):
+                    try:
+                        zd0_values[idofs.index(i)] = dof
+                        print "Set zd0[%d] (%s) to %g" % (
+                            idofs.index(i), element_name, dof)
+                    except IndexError:
+                        print "Not setting DOF %d" % i
+                        pass
+        else:
+            zd0_values = zd0
+
+        # Linearise the system about the given operating point
         self.system.update_kinematics()
-        linsys = LinearisedSystem.from_system(self.system, z0=z0,
+        linsys = LinearisedSystem.from_system(self.system,
+                                              z0=z0_values, zd0=zd0_values,
                                               perturbation=perturbation)
+
+        # Apply multi-blade coordinate transform if needed
+        if mbc:
+            iazimuth = self.system.qd.dofs.subset.index(
+                self.system.elements['shaft']._istrain[0])
+            iblades = [
+                [self.system.qd.dofs.subset.index(s)
+                 for s in self.system.elements['blade%d' % (i+1)]._istrain]
+                for i in range(3)
+            ]
+            linsys = linsys.multiblade_transform(iazimuth, iblades)
+
+        return linsys
+
+    def linearised_matrices(self, *args, **kwargs):
+        linsys = self.linearised_system(*args, **kwargs)
         return linsys.M, linsys.C, linsys.K
