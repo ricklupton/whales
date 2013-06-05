@@ -76,21 +76,24 @@ class FloatingTurbineModel(object):
         assert len(S_wave) == len(self.w)
         self.Bwd = self.hydro_info.wave_drift_damping(self.w, S_wave)
 
-    def linearised_matrices(self, w):
+    def linearised_matrices(self, w, **kwargs):
         """
         Linearise the structural model and add in the hydrodynamic
         added-mass and damping for the given frequency ``w``, as well
         as the hydrostatic stiffness, wave-drift damping and viscous damping.
         """
+        # Set default perturbation
+        kwargs.setdefault('perturbation', 1e-4)
+
         # Structural - includes gravitational stiffness
-        M, B, C, = self.structure.linearised_matrices(perturbation=1e-4)
+        M, B, C, = self.structure.linearised_matrices(**kwargs)
         M[:6, :6] += self.hydro_info.A(w)
         B[:6, :6] += self.hydro_info.B(w) + self.Bv + self.Bwd + self.B_extra
         C[:6, :6] += self.hydro_info.C + self.mooring_stiffness
         return M, B, C
 
-    def coupled_modes(self, w):
-        M, B, C = self.linearised_matrices(w)
+    def coupled_modes(self, w, **kwargs):
+        M, B, C = self.linearised_matrices(w, **kwargs)
         wn, vn = linalg.eig(C, M)
         order = np.argsort(wn)
         wn = np.sqrt(np.real(wn[order]))
