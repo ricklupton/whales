@@ -2,6 +2,7 @@
 Build a structural model of a wind turbine using mbwind
 """
 
+import itertools
 import numpy as np
 from numpy import dot, pi
 from mbwind.utils import rotmat_x, rotmat_y
@@ -189,3 +190,10 @@ class FloatingTurbineStructure(object):
     def linearised_matrices(self, *args, **kwargs):
         linsys = self.linearised_system(*args, **kwargs)
         return linsys.M, linsys.C, linsys.K
+
+    def describe_states(self):
+        q = self.system.q
+        states = [(q.owners[j], i) for i, j in enumerate(q.dofs.subset)]
+        for owner, owner_states in itertools.groupby(states, lambda x: x[0]):
+            numbers = [x[1] for x in owner_states]
+            print '{:2}-{:2}: {}'.format(numbers[0], numbers[-1], owner)

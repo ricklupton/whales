@@ -3,7 +3,7 @@ Input for floating wind turbine model
 """
 
 import numpy as np
-from numpy import linalg, newaxis, zeros_like, eye
+from numpy import newaxis, zeros_like, eye, r_, c_
 from scipy import interpolate, integrate, linalg
 import h5py
 import yaml
@@ -92,15 +92,32 @@ class FloatingTurbineModel(object):
         C[:6, :6] += self.hydro_info.C + self.mooring_stiffness
         return M, B, C
 
-    def coupled_modes(self, w, **kwargs):
+    def coupled_modes(self, w, ignore_damping=False, **kwargs):
         M, B, C = self.linearised_matrices(w, **kwargs)
-        wn, vn = linalg.eig(C, M)
-        order = np.argsort(wn)
-        wn = np.sqrt(np.real(wn[order]))
-        vn = vn[:, order]
+        if ignore_damping:
+            wn, vn = linalg.eig(C, M)
+        else:
+            AA = r_[c_[zeros_like(C), C], c_[C, B]]
+            BB = r_[c_[C, zeros_like(C)], c_[zeros_like(C), -M]]
+            wn, vn = linalg.eig(AA, BB)
+            order = np.argsort(abs(wn))
+            wn = abs(wn[order])
+            # Mode shapes are the first half of the rows; the second
+            # half of the rows should be same multiplied by eigenvalues.
+            vn = vn[:M.shape[0], order]
+
+            # We expect all the modes to be complex conjugate; return
+            # every other one.
+            # First: make sure all are the same sign
+            norm_vn = vn / vn[np.argmax(abs(vn), axis=0), range(vn.shape[1])]
+            assert (np.allclose(wn[::2], wn[1::2], rtol=1e-4) and
+                    np.allclose(norm_vn[:, ::2], norm_vn[:, 1::2].conj(), atol=1e-2)), \
+                "Expect conjugate modes"
+            wn = wn[::2]
+            vn = norm_vn[:, ::2]
         return wn, vn
 
-    def transfer_function(self):
+    def transfer_function(self, rotor_speed=None):
         """
         Linearise the structural model and return multi-dof transfer function
         for the structure, including mooring lines and hydrodynamics, at the
@@ -108,9 +125,13 @@ class FloatingTurbineModel(object):
         """
 
         # Structural - includes gravitational stiffness
-        M_struct, B_struct, C_struct = self.structure.linearised_matrices()
+        if rotor_speed is not None:
+            M_struct, B_struct, C_struct = self.structure.linearised_matrices(
+                zd0={'shaft': [rotor_speed]}, mbc=True)
+        else:
+            M_struct, B_struct, C_struct = self.structure.linearised_matrices()
 
-        # Mull matrices to be assembled at each frequency
+        # Full matrices to be assembled at each frequency
         Mi = zeros_like(M_struct)
         Bi = zeros_like(B_struct)
         Ci = zeros_like(C_struct)
