@@ -152,7 +152,7 @@ class FloatingTurbineStructure(object):
             self.system.free(self.system.elements['tower'])
             # Constrain missing DOFs -- tower torsion & extension not complete
             self.system.prescribe(self.system.elements['tower'], vel=0,
-                                  parts=[0, 3])
+                                  part=[0, 3])
         if what in ('rotor', 'all'):
             for i in range(3):
                 self.system.free(self.system.elements['blade%d' % (i+1)])
@@ -173,13 +173,9 @@ class FloatingTurbineStructure(object):
 
         # Apply multi-blade coordinate transform if needed
         if mbc:
-            iazimuth = self.system.qd.dofs.subset.index(
-                self.system.elements['shaft']._istrain[0])
-            iblades = [
-                [self.system.qd.dofs.subset.index(s)
-                 for s in self.system.elements['blade%d' % (i+1)]._istrain]
-                for i in range(3)
-            ]
+            iazimuth = self.system.free_dof_indices('shaft')[0]
+            iblades = [self.system.free_dof_indices('blade{}'.format(i+1))
+                       for i in range(3)]
             if mbc == 2:
                 linsys = linsys.multiblade_transform2(iazimuth, iblades)
             else:

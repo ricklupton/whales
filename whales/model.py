@@ -151,13 +151,13 @@ class FloatingTurbineModel(object):
             H[i, :, :] = linalg.inv(-(w**2)*Mi + 1j*w*Bi + Ci)
         return H
 
-    def transfer_function_from_wave_elevation(self, heading=0):
+    def transfer_function_from_wave_elevation(self, rotor_speed=None, heading=0):
         """
         Calculate the transfer function from wave elevation to response,
         similar to ``transfer_function(ws)`` but including the wave excitation
         force ``X``.
         """
-        H = self.transfer_function()
+        H = self.transfer_function(rotor_speed)
         X = self.hydro_info.X(self.w, heading)  # interpolate
 
         # Add in the viscous drag force due to waves
