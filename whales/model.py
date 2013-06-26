@@ -7,6 +7,7 @@ from numpy import newaxis, zeros_like, eye, r_, c_
 from scipy import interpolate, integrate, linalg
 import h5py
 import yaml
+from path import path
 
 from whales.io import WAMITData, SecondOrderData
 from whales.viscous_drag import ViscousDragModel
@@ -44,7 +45,10 @@ class FloatingTurbineModel(object):
             self.B_extra = np.diag(self.B_extra)
 
         # Viscous drag model
-        self.morison = ViscousDragModel(h['Morison elements'])
+        if 'Morison elements' in h:
+            self.morison = ViscousDragModel(h['Morison elements'])
+        else:
+            self.morison = None
         self.Bv = np.zeros((6, 6))
         self.Fvc = np.zeros(6)
         self.Fvv = np.zeros((len(self.w), 6))
@@ -96,6 +100,9 @@ class FloatingTurbineModel(object):
         M, B, C = self.linearised_matrices(w, **kwargs)
         if ignore_damping:
             wn, vn = linalg.eig(C, M)
+            order = np.argsort(abs(wn))
+            wn = np.sqrt(abs(wn[order]))
+            vn = vn[:, order]
         else:
             AA = r_[c_[zeros_like(C), C], c_[C, B]]
             BB = r_[c_[C, zeros_like(C)], c_[zeros_like(C), -M]]
@@ -194,6 +201,10 @@ class FloatingTurbineModel(object):
 
     @classmethod
     def from_yaml(cls, filename, freq):
+        # Read the data
         with open(filename) as f:
             config = yaml.safe_load(f)
-        return cls(config, freq)
+
+        # Load the config file from the same directory
+        with path(filename).abspath().parent:
+            return cls(config, freq)

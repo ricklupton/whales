@@ -3,6 +3,7 @@ Wave spectra
 """
 
 import numpy as np
+from numpy import pi
 
 g = 9.81
 
@@ -47,3 +48,33 @@ class JONSWAP(object):
             return 1.0
         else:
             return np.exp( 5.75 - 1.15*TpOvrSqrtHs )
+
+
+class JONSWAP_Barltrop(object):
+    """
+    JONSWAP spectrum as quoted by Zhang2010 (p.54)
+    """
+
+    def __init__(self, Hs, Tz, gamma=None):
+        """Three-parameter JONSWAP spectrum"""
+        self.Hs = Hs
+        self.Tz = Tz
+        self.gamma = gamma
+
+        self.kb = kb = 1.4085
+        kp = 0.327 * np.exp(-0.315 * gamma) + 1.17
+        kg = 1 - 0.285 * np.log(gamma)
+
+        # Convert from zero-crossing period to peak frequency
+        self.wp = 2*np.pi / (kp * Tz)
+
+        # My own parameter for simplicity
+        self.alpha = (kb**4 * Hs**2 * kg * 4 * pi**3) / (kp*Tz)**4
+
+    def __call__(self, w):
+        sigma = np.choose(w > self.wp, [0.07, 0.09])
+        a = np.exp( -(w/self.wp - 1)**2 / (2 * sigma**2) )
+        S = ((self.alpha / w**5) *
+             np.exp( -(1/pi) / (w / self.wp / self.kb)**4 ) *
+             self.gamma**a)
+        return S

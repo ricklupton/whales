@@ -62,28 +62,38 @@ class HydrodynamicsInfo(object):
         \left| T_i^{\mathrm{c}}(\mu, \mu + \omega) \right|^2 \mathrm{d}\mu $$
         but extended to give the cross-spectrum S_ij
         """
-
         if heading != 0:
             raise RuntimeError("No QTF data for headings other than 0")
-
-        # First make the matrix SS_kl, where l is the freq and k is the offset
-        #  SS_kl = S(w_l) * S(w_l + w_k)
-        SS = np.tile(S_wave, (len(w), 1))
-        for k in range(len(w)):
-            SS[k, :] *= shift(S_wave, k, fill=0)
-
-        # Next use the Newman approximation to make a similar matrix TTc
         Tc = self.Tc(w)  # interpolate -> (len(w), 6) matrix
-        TTc = np.tile(Tc, (len(w), 1, 1))  # copy downwards new 0 axis
-        for k in range(len(w)):
-            for i in range(6):
-                TTc[k, :, i] += shift(Tc[:, i], k)
-        TTc /= 2  # average
+        return second_order_force_spectrum(w, self.Tc(w), S_wave)
 
-        # Now loop through each DOF to make the 2nd order spectrum
-        S2 = np.zeros((len(w), 6, 6))
-        for i in range(6):
-            for j in range(6):
-                integrand = SS * TTc[:, :, i] * TTc[:, :, j]
-                S2[:, i, j] = 8 * integrate.simps(integrand, w, axis=1)
-        return S2
+
+def second_order_force_spectrum(w, Tc, S_wave):
+    """Calculate the 2nd order force spectrum defined by
+    $$ S_i^{(2)}(\omega) =
+    8 \int S_{\eta\eta}(\mu) S_{\eta\eta}(\mu + \omega) \,
+    \left| T_i^{\mathrm{c}}(\mu, \mu + \omega) \right|^2 \mathrm{d}\mu $$
+    but extended to give the cross-spectrum S_ij
+    """
+    Ndof = Tc.shape[1]
+
+    # First make the matrix SS_kl, where l is the freq and k is the offset
+    #  SS_kl = S(w_l) * S(w_l + w_k)
+    SS = np.tile(S_wave, (len(w), 1))
+    for k in range(len(w)):
+        SS[k, :] *= shift(S_wave, k, fill=0)
+
+    # Next use the Newman approximation to make a similar matrix TTc
+    TTc = np.tile(Tc, (len(w), 1, 1))  # copy downwards new 0 axis
+    for k in range(len(w)):
+        for i in range(Ndof):
+            TTc[k, :, i] += shift(Tc[:, i], k)
+    TTc /= 2  # average
+
+    # Now loop through each DOF to make the 2nd order spectrum
+    S2 = np.zeros((len(w), Ndof, Ndof))
+    for i in range(Ndof):
+        for j in range(Ndof):
+            integrand = SS * TTc[:, :, i] * TTc[:, :, j]
+            S2[:, i, j] = 8 * integrate.simps(integrand, w, axis=1)
+    return S2
