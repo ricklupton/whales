@@ -3,8 +3,8 @@ Models for floating vertical cylinders
 """
 
 import numpy as np
-from numpy import pi, diag, zeros, zeros_like, sinh, cosh
-from scipy.special import jn, hankel2
+from numpy import pi, diag, zeros, zeros_like, sinh, cosh, newaxis
+from scipy.special import jn, hankel1, hankel2
 
 from . import LinearSystem
 from extra_special import jnd, hankel1d, hankel2d
@@ -45,6 +45,7 @@ def first_order_excitation(k, draft, radius, water_depth):
 
     # XXX check this!
     f1 = -1j * (jn(1, ka) - jnd(1, ka) * hankel2(1, ka) / hankel2d(1, ka))
+    #f1 = -1j * (jn(1, ka) - jnd(1, ka) * hankel1(1, ka) / hankel1d(1, ka))
     M = (kd*sinh(kh-kd) + cosh(kh-kd) - cosh(kh)) / (k * cosh(kh))
     F = (-sinh(kh-kd) + sinh(kh)) / cosh(kh)
     X = np.zeros(M.shape + (6,), dtype=np.complex)
@@ -56,8 +57,23 @@ def first_order_excitation(k, draft, radius, water_depth):
 def excitation_force(w, draft, radius, water_depth):
     """Excitation force on cylinder using Drake's first_order_excitation"""
     k = w**2 / 9.81
-    X = 1025 * 9.81 * radius**2 * first_order_excitation(k, draft, radius,
-                                                         water_depth)
+    ka = k * radius
+    kd = k * draft
+    kh = k * water_depth
+
+    rho = 1025
+    g = 9.81
+
+    # XXX check this!
+    f1 = -1j * (jn(1, ka) - jnd(1, ka) * hankel2(1, ka) / hankel2d(1, ka))
+    #f1 = -1j * (jn(1, ka) - jnd(1, ka) * hankel1(1, ka) / hankel1d(1, ka))
+    M = (kd*sinh(kh-kd) + cosh(kh-kd) - cosh(kh)) / (k**2 * cosh(kh))
+    F = (-sinh(kh-kd) + sinh(kh)) / (k * cosh(kh))
+
+    zs = zeros_like(F, dtype=np.complex)
+    X = np.c_[F, zs, zs, zs, M, zs]
+    X *= (-rho * g * pi * radius) * 2 * f1[:, newaxis]
+
     return X
 
 
