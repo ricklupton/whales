@@ -21,6 +21,19 @@ class PiersonMoskowitz(object):
         S = self.alpha * g**2 / w**5 * np.exp(-self.beta * (self.wp / w)**4)
         return S
 
+
+class ISSC(object):
+    def __init__(self, Hs, Tz):
+        """Two-parameter ISSC spectrum (Langley1987)"""
+        self.Hs = Hs
+        self.Tz = Tz
+
+    def __call__(self, w):
+        S = (173.0 * self.Hs**2 / (self.Tz**4 * w**5) *
+             np.exp(-691.0 / (self.Tz * w)**4))
+        return S
+
+
 class JONSWAP(object):
     def __init__(self, Hs, Tp, gamma=None):
         """Three-parameter JONSWAP spectrum"""
