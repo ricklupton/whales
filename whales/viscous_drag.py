@@ -9,7 +9,7 @@ class ViscousDragModel(object):
     """Represent and linearise viscous drag on elements"""
     def __init__(self, config):
         self.Cd = config.get('drag coefficient', 0.0)
-        self.Cm = config.get('inertia coefficient', 1.0)
+        self.Cm = config.get('inertia coefficient', 2.0)
         if len(config['members']) != 1:
             raise NotImplementedError("not generalised for multiple members yet")
         m = config['members'][0]
